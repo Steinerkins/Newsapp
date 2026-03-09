@@ -77,39 +77,53 @@ if data.get('status') == 'ok':
             if quelle_passt and thema_passt:
                 gefilterte_artikel.append(art)
 
-        # --- 6. KI Zusammenfassung generieren ---
+# --- 6. KI Zusammenfassung (Ausführliches Briefing) ---
         st.divider()
-        st.subheader("✨ KI-Kurzzusammenfassung der aktuellen Lage")
+        st.subheader("✨ Dein ausführliches KI-Briefing")
         
-        # Wir nehmen die Titel der Top 10 gefilterten Artikel für die KI
-        top_titel = [art.get('title') for art in gefilterte_artikel[:10]]
-        prompt = f"Fasse die folgenden Nachrichtentitel in 3 bis 4 kurzen, professionellen Stichpunkten zusammen. Ignoriere irrelevantes. Titel: {top_titel}"
+        # Wir geben der KI alle verfügbaren Titel für ein umfassendes Bild
+        alle_titel = [art.get('title') for art in gefilterte_artikel]
         
-        if st.button("Zusammenfassung jetzt generieren"):
-            with st.spinner("Gemini liest die Nachrichten..."):
+        # Ein präziser Prompt für ein 3-minütiges Briefing
+        prompt = f"""
+        Du bist ein erfahrener Nachrichtenredakteur. Erstelle ein ausführliches, flüssig lesbares Morgen-Briefing 
+        basierend auf den folgenden tagesaktuellen Schlagzeilen: {alle_titel}.
+        
+        DEINE AUFGABE:
+        1. Schreibe eine Zusammenfassung mit ca. 400-500 Wörtern (entspricht ca. 3 Min. Lesezeit).
+        2. Konzentriere dich EXKLUSIV auf tagesaktuelle Entwicklungen und Ereignisse von HEUTE. 
+        3. Ignoriere allgemeine Trends oder langfristige Analysen, es sei denn, es gibt heute eine konkrete neue Wendung.
+        4. Strukturiere den Text in klare Abschnitte (z.B. Geopolitik, Nationale Politik, Wirtschaft).
+        5. Der Ton soll professionell, sachlich und informativ sein.
+        6. Ziel ist es, dass der Leser nach der Lektüre genau weiß, welche Themen er in den Einzelartikeln vertiefen möchte.
+        
+        WICHTIG: Erfinde keine Fakten dazu. Wenn die Schlagzeilen nicht genug hergeben, fasse dich kürzer, aber bleib präzise.
+        """
+        
+        if st.button("Ausführliches Briefing generieren"):
+            with st.spinner("Redaktion arbeitet... Bitte hab einen Moment Geduld für den ausführlichen Bericht."):
                 try:
-                    # Wir lassen den Code alle verfügbaren Modelle abfragen
                     verfuegbare_modelle = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
                     
                     if verfuegbare_modelle:
-                        # Wir nehmen einfach das erste funktionierende Modell aus der Liste
-                        gewaehltes_modell = verfuegbare_modelle[0]
-                        model = genai.GenerativeModel(gewaehltes_modell) 
+                        # Wir nehmen das erste Modell (meist gemini-1.5-flash oder pro)
+                        model = genai.GenerativeModel(verfuegbare_modelle[0]) 
+                        # Wir erhöhen die 'candidate_count' nicht, aber wir lassen der KI Raum für mehr Text
                         antwort = model.generate_content(prompt)
-                        st.success("Hier ist deine Zusammenfassung:")
-                        st.info(antwort.text)
+                        
+                        st.success(f"Dein Briefing für den {datetime.now().strftime('%d.%m.%Y')}:")
+                        # Wir nutzen ein Textfeld mit Scrollbalken oder einfach st.write für gute Lesbarkeit
+                        st.markdown(antwort.text)
                     else:
-                        st.error("Dein API-Key hat aktuell keinen Zugriff auf Text-Modelle.")
+                        st.error("Kein KI-Modell verfügbar.")
                         
                 except Exception as e:
-                    st.error(f"Leider gab es ein Problem mit der KI: {e}")
-
-        st.divider()
+                    st.error(f"Fehler bei der Textgenerierung: {e}")
 
         # --- 7. Artikel anzeigen ---
         st.subheader(f"📰 Deine Artikel ({len(gefilterte_artikel)} gefunden)")
         
-        for art in gefilterte_artikel[:15]: # Wir zeigen max. 15 an, damit die Seite nicht zu lang wird
+        for art in gefilterte_artikel[:25]: # Wir zeigen max. 25 an, damit die Seite nicht zu lang wird
             title = art.get('title', 'Kein Titel')
             url = art.get('url', '#')
             source = art.get('source', {}).get('name', 'Unbekannte Quelle')
