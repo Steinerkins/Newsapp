@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 # Konfiguration
-API_KEY = 3f8ce342ed6344deb2cdcf28e0729b13  # Ersetze dies durch deinen echten Key
+API_KEY =   # Ersetze dies durch deinen echten Key
 BASE_URL = 'https://newsapi.org/v2/everything'
 
 st.title("My News App 📰")
