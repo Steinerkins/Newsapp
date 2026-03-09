@@ -85,11 +85,17 @@ if data.get('status') == 'ok':
         top_titel = [art.get('title') for art in gefilterte_artikel[:10]]
         prompt = f"Fasse die folgenden Nachrichtentitel in 3 bis 4 kurzen, professionellen Stichpunkten zusammen. Ignoriere irrelevantes. Titel: {top_titel}"
         
-        if st.button("Zusammenfassung jetzt generieren"):
+     if st.button("Zusammenfassung jetzt generieren"):
             with st.spinner("Gemini liest die Nachrichten..."):
-                model = genai.GenerativeModel('gemini-1.5-flash') # Ein schnelles Modell für Text
-                antwort = model.generate_content(prompt)
-                st.info(antwort.text)
+                try:
+                    # Wir nutzen das verlässliche Standard-Modell
+                    model = genai.GenerativeModel('gemini-pro') 
+                    antwort = model.generate_content(prompt)
+                    st.success("Hier ist deine Zusammenfassung:")
+                    st.info(antwort.text)
+                except Exception as e:
+                    # Falls etwas schiefgeht, stürzt die App nicht ab!
+                    st.error(f"Leider gab es ein Problem mit der KI: {e}")
 
         st.divider()
 
