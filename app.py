@@ -88,13 +88,20 @@ if data.get('status') == 'ok':
         if st.button("Zusammenfassung jetzt generieren"):
             with st.spinner("Gemini liest die Nachrichten..."):
                 try:
-                    # Wir nutzen das verlässliche Standard-Modell
-                    model = genai.GenerativeModel('gemini-pro') 
-                    antwort = model.generate_content(prompt)
-                    st.success("Hier ist deine Zusammenfassung:")
-                    st.info(antwort.text)
+                    # Wir lassen den Code alle verfügbaren Modelle abfragen
+                    verfuegbare_modelle = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                    
+                    if verfuegbare_modelle:
+                        # Wir nehmen einfach das erste funktionierende Modell aus der Liste
+                        gewaehltes_modell = verfuegbare_modelle[0]
+                        model = genai.GenerativeModel(gewaehltes_modell) 
+                        antwort = model.generate_content(prompt)
+                        st.success("Hier ist deine Zusammenfassung:")
+                        st.info(antwort.text)
+                    else:
+                        st.error("Dein API-Key hat aktuell keinen Zugriff auf Text-Modelle.")
+                        
                 except Exception as e:
-                    # Falls etwas schiefgeht, stürzt die App nicht ab!
                     st.error(f"Leider gab es ein Problem mit der KI: {e}")
 
         st.divider()
