@@ -148,11 +148,6 @@ if data.get('status') == 'ok':
                         SCHLAGWÖRTER: Konkretes Ereignis 1, Konkretes Ereignis 2, Konkretes Ereignis 3
                         """
                         
-                        WICHTIGE ZUSATZAUFGABE:
-                        Füge GANZ AM ENDE deines Textes exakt diese Zeile ein, um die 3 bis 4 wichtigsten Schlagwörter/Themen zu nennen, getrennt durch Kommas:
-                        SCHLAGWÖRTER: Wort1, Wort2, Wort3
-                        """
-                        
                         verfuegbare_modelle = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
                         model = genai.GenerativeModel(verfuegbare_modelle[0]) 
                         antwort = model.generate_content(prompt)
