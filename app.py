@@ -2,8 +2,9 @@ import streamlit as st
 import requests
 import google.generativeai as genai
 from datetime import datetime, timedelta
-from gtts import gTTS
-import io
+import asyncio
+import edge_tts
+import tempfile
 
 # --- 1. API Keys & Konfiguration ---
 NEWS_API_KEY = st.secrets["API_KEY"]  
@@ -185,13 +186,13 @@ if data.get('status') == 'ok':
                         quellen_text = "\n".join(artikel_daten)
 
                         prompt = f"""
-                        Du bist ein professioneller Nachrichtensprecher. Erstelle ein tagesaktuelles Morgen-Briefing, das AUSSCHLIESSLICH auf den folgenden redaktionellen Meldungen von heute basiert:
+                        Du bist ein professioneller Nachrichtensprecher. Erstelle ein tagesaktuelles Briefing, das AUSSCHLIESSLICH auf den folgenden redaktionellen Meldungen von heute basiert:
+                        Beginne deinen Bericht mit einer Begrüßung (je nach Tageszeit), willkommen zum KI-Briefing.
                         
                         QUELLMATERIAL:
                         {quellen_text}
                         
                         DEINE AUFGABE UND REGELN:
-                        Du bist ein Nachrichtensprecher. Beginne deinen Bericht mit Guten Morgen (oder mit der entsprechenden Tageszeit), willkommen zum KI-Briefing.
                         1. Stil & Länge: Schreibe einen sachlichen, professionellen Fließtext von ca. 300 Wörtern. Passe deine Ausdrucksweise der eines offiziellen Nachritenportals an.
                         2. Struktur: Gliedere den Text in sinnvolle Themenblöcke. Orientiere dich auch hier an der Struktur seriöser Nachrichtenportalen (die Themen in Kurzfassung, nationale Ereignisse, internationale, Ereignisse etc.)
                         3. Strikte Faktenbindung: Verwende KEIN externes Wissen! Bleib exakt bei den Fakten aus dem Quellmaterial.
@@ -243,12 +244,25 @@ if data.get('status') == 'ok':
             st.success("Dein heutiges Briefing:")
             st.markdown(st.session_state.briefing_text)
             
-            # Audio-Player erstellen (wird nur neu geladen, wenn sich der Text ändert)
-            with st.spinner("Generiere Audio..."):
-                tts = gTTS(text=st.session_state.briefing_text, lang='de')
-                audio_bytes = io.BytesIO()
-                tts.write_to_fp(audio_bytes)
-                st.audio(audio_bytes, format="audio/mp3")
+            # --- NEU: Premium Audio-Player (Edge TTS) ---
+            with st.spinner("Tonstudio generiert Sprachausgabe..."):
+                # Wir lagern das in eine asynchrone Funktion aus
+                async def generiere_audio(text):
+                    # "de-DE-ConradNeural" ist eine sehr gute, professionelle Männerstimme.
+                    # Alternativen: "de-DE-AmalaNeural" (Frau) oder "de-DE-KillianNeural" (Mann)
+                    sprecher = edge_tts.Communicate(text, "de-DE-ConradNeural", rate="+5%") 
+                    
+                    # Erstellt eine temporäre MP3-Datei
+                    tmp_datei = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+                    await sprecher.save(tmp_datei.name)
+                    return tmp_datei.name
+                
+                # Audio generieren und im Streamlit-Player laden
+                try:
+                    audio_pfad = asyncio.run(generiere_audio(st.session_state.briefing_text))
+                    st.audio(audio_pfad, format="audio/mp3")
+                except Exception as e:
+                    st.error(f"Fehler bei der Audio-Generierung: {e}")
 
             # Themen-Buttons anzeigen
             if st.session_state.themen_liste:
