@@ -133,19 +133,31 @@ if data.get('status') == 'ok':
             else:
                 with st.spinner("Redaktion arbeitet... Bitte hab einen Moment Geduld."):
                     try:
-                        titel_liste = [art.get('title') for art in gefilterte_artikel]
-                        # Neuer Prompt: Wir fordern die KI auf, die Themen am Ende aufzulisten
+                        artikel_daten = []
+                        for art in gefilterte_artikel:
+                            titel = art.get('title') or ""
+                            teaser = art.get('description') or ""
+                            # Wir nehmen nur Artikel, die auch wirklich Inhalt haben
+                            if titel and teaser:
+                                artikel_daten.append(f"SCHLAGZEILE: {titel} | REDAKTIONELLE ZUSAMMENFASSUNG: {teaser}")
+                        
+                        # Wir wandeln die Liste in einen Textblock um
+                        quellen_text = "\n".join(artikel_daten)
+
                         prompt = f"""
-                        Du bist ein professioneller Nachrichtensprecher. Erstelle ein tagesaktuelles Morgen-Briefing, das AUSSCHLIESSLICH auf den folgenden Schlagzeilen von heute basiert: {titel_liste}.
+                        Du bist ein professioneller Nachrichtensprecher. Erstelle ein tagesaktuelles Morgen-Briefing, das AUSSCHLIESSLICH auf den folgenden redaktionellen Meldungen von heute basiert:
+                        
+                        QUELLMATERIAL:
+                        {quellen_text}
                         
                         DEINE AUFGABE UND REGELN:
-                        1. Stil & Länge: Schreibe einen sachlichen, professionellen Fließtext von ca. 300 Wörtern, der sich wie die Moderation einer Nachrichtensendung liest.
+                        1. Stil & Länge: Schreibe einen sachlichen, professionellen Fließtext von ca. 300 Wörtern. Nutze die Fakten aus den redaktionellen Zusammenfassungen, um Tiefe zu erzeugen.
                         2. Struktur: Gliedere den Text in sinnvolle Themenblöcke.
-                        3. Strikte Faktenbindung: Verwende KEIN externes Wissen! Erfinde absolut nichts dazu. Wenn die Schlagzeilen ein Thema nicht hergeben, erwähne es nicht.
-                        4. Konkrete Themen-Buttons: Anstatt allgemeiner Kategorien (wie "Wirtschaft" oder "Politik"), musst du spezifische Ereignisse benennen (z.B. "Landtagswahl in Sachsen", "Streik bei der Bahn", "Zinssenkung der EZB").
+                        3. Strikte Faktenbindung: Verwende KEIN externes Wissen! Bleib exakt bei den Fakten aus dem Quellmaterial.
+                        4. Konkrete Themen-Buttons: Benenne spezifische, im Text erwähnte Ereignisse (z.B. "Landtagswahl in Sachsen", "Zinssenkung").
                         
-                        WICHTIG: Füge GANZ AM ENDE deines Textes exakt diese Zeile ein, um 3 bis 4 dieser spezifischen Ereignisse kommagetrennt aufzulisten:
-                        SCHLAGWÖRTER: Konkretes Ereignis 1, Konkretes Ereignis 2, Konkretes Ereignis 3
+                        WICHTIG: Füge GANZ AM ENDE deines Textes exakt diese Zeile ein:
+                        Wichtigste Themen des Tages: Ereignis 1, Ereignis 2, Ereignis 3
                         """
                         
                         verfuegbare_modelle = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
