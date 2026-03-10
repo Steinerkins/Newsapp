@@ -108,7 +108,7 @@ if data.get('status') == 'ok':
             
             # Region des Artikels bestimmen
             region = "INT"
-            if ".de" in url or "dw.com" in url:
+            if ".de" in url or "dw.com" or "faz.net" in url:
                 region = "DE"
             elif "bbc" in url or "theguardian" in url:
                 region = "GB"
@@ -271,23 +271,18 @@ if data.get('status') == 'ok':
             url = art.get('url') or '#'
             quelle = art.get('source', {}).get('name') or 'Unbekannte Quelle'
             
-            # --- NEU: Flaggen-Logik ---
-            flagge = "🌍" # Standard-Icon für internationale Medien (z.B. Al Jazeera)
-            if url:
-                url_lower = url.lower()
-                # Deutschland (Alle .de Domains + Deutsche Welle)
-                if ".de" in url_lower or "dw.com" in url_lower:
-                    flagge = "🇩🇪"
-                # Großbritannien
-                elif "bbc" in url_lower or "theguardian" in url_lower:
-                    flagge = "🇬🇧"
-                # USA
-                elif "reuters" in url_lower or "apnews" in url_lower or "npr" in url_lower:
-                    flagge = "🇺🇸"
-            # --------------------------
+            # Windows-kompatible Text-Tags
+            tag = "[INT]"
+            url_lower = url.lower()
+            if ".de" in url_lower or "dw.com" in url_lower:
+                tag = "[DE]"
+            elif "bbc" in url_lower or "theguardian" in url_lower:
+                tag = "[GB]"
+            elif "reuters" in url_lower or "apnews" in url_lower or "npr" in url_lower:
+                tag = "[US]"
             
-            # Die Flagge wird direkt vor den Titel gesetzt
-            st.write(f"**{flagge} {titel}**")
+            # Tag vor den Titel setzen
+            st.write(f"**{tag} {titel}**")
             st.caption(f"Quelle: {quelle} | [Zum Artikel]({url})")
             st.write("---")
             
