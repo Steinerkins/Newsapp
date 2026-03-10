@@ -238,13 +238,29 @@ if data.get('status') == 'ok':
         else:
             st.subheader(f"📰 Top-Meldungen ({len(anzeige_artikel)} gefunden - Bunt gemischt)")
         
-        # Artikel darstellen
+       # Artikel darstellen
         for art in anzeige_artikel:
             titel = art.get('title') or 'Kein Titel verfügbar'
             url = art.get('url') or '#'
             quelle = art.get('source', {}).get('name') or 'Unbekannte Quelle'
             
-            st.write(f"**{titel}**")
+            # --- NEU: Flaggen-Logik ---
+            flagge = "🌍" # Standard-Icon für internationale Medien (z.B. Al Jazeera)
+            if url:
+                url_lower = url.lower()
+                # Deutschland (Alle .de Domains + Deutsche Welle)
+                if ".de" in url_lower or "dw.com" in url_lower:
+                    flagge = "🇩🇪"
+                # Großbritannien
+                elif "bbc" in url_lower or "theguardian" in url_lower:
+                    flagge = "🇬🇧"
+                # USA
+                elif "reuters" in url_lower or "apnews" in url_lower or "npr" in url_lower:
+                    flagge = "🇺🇸"
+            # --------------------------
+            
+            # Die Flagge wird direkt vor den Titel gesetzt
+            st.write(f"**{flagge} {titel}**")
             st.caption(f"Quelle: {quelle} | [Zum Artikel]({url})")
             st.write("---")
             
