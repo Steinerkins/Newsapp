@@ -16,8 +16,7 @@ genai.configure(api_key=GEMINI_API_KEY)
 BASE_URL = 'https://newsapi.org/v2/everything'
 erlaubte_quellen_liste = [
     "tagesschau.de", "zdf.de", "n-tv.de", "t-online.de", 
-    "rnd.de", "dw.com", "welt.de", "zeit.de", "faz.net", "sueddeutsche.de"
-    # Englische Agenturen & Leitmedien
+    "rnd.de", "dw.com", "welt.de", "zeit.de", "faz.net", "sueddeutsche.de", 
     "reuters.com", "apnews.com", "bbc.co.uk", "theguardian.com", "npr.org", "aljazeera.com"
 ]
 erlaubte_quellen_str = ",".join(erlaubte_quellen_liste)
@@ -52,7 +51,6 @@ else:
 params = {
     'q': query,
     'apiKey': NEWS_API_KEY,
-    'language': 'de,en',
     'sortBy': 'publishedAt', 
     'from': gestern,         
     'pageSize': 100,         # Leicht erhöht, um die vielen neuen Quellen aufzufangen
