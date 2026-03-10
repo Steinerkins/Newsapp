@@ -2,6 +2,8 @@ import streamlit as st
 import requests
 import google.generativeai as genai
 from datetime import datetime
+from gtts import gTTS
+import io
 
 # --- 1. API Keys & Konfiguration ---
 NEWS_API_KEY = st.secrets["API_KEY"]  
@@ -20,6 +22,14 @@ erlaubte_quellen_str = ",".join(erlaubte_quellen_liste)
 
 # Seitenlayout
 st.set_page_config(page_title="KI Morning Briefing", page_icon="☕", layout="wide")
+
+# --- Gedächtnis der App (Session State) ---
+if 'briefing_text' not in st.session_state:
+    st.session_state.briefing_text = ""
+if 'themen_liste' not in st.session_state:
+    st.session_state.themen_liste = []
+if 'klick_thema' not in st.session_state:
+    st.session_state.klick_thema = None
 
 # --- 2. UI Header & Suche ---
 st.title("☕ Dein KI-gestütztes Morning Briefing")
@@ -113,7 +123,7 @@ if data.get('status') == 'ok':
                 if len(gefilterte_artikel) >= max_anzeige:
                     break
 
-        # --- 7. KI-Briefing ---
+# --- 7. KI-Briefing mit Audio & Themen-Extraktion ---
         st.divider()
         st.subheader("✨ Dein ausführliches KI-Briefing")
         
@@ -124,35 +134,68 @@ if data.get('status') == 'ok':
                 with st.spinner("Redaktion arbeitet... Bitte hab einen Moment Geduld."):
                     try:
                         titel_liste = [art.get('title') for art in gefilterte_artikel]
+                        # Neuer Prompt: Wir fordern die KI auf, die Themen am Ende aufzulisten
                         prompt = f"""
-                        Du bist ein erfahrener Nachrichtenredakteur. Erstelle ein ausführliches, flüssig lesbares Morgen-Briefing 
-                        basierend auf den folgenden tagesaktuellen Schlagzeilen: {titel_liste}.
+                        Erstelle ein flüssig lesbares Morgen-Briefing (ca. 400 Wörter) zu diesen tagesaktuellen Titeln: {titel_liste}.
                         
-                        DEINE AUFGABE:
-                        1. Schreibe eine Zusammenfassung mit ca. 400-500 Wörtern.
-                        2. Konzentriere dich EXKLUSIV auf tagesaktuelle Entwicklungen von heute.
-                        3. Strukturiere den Text in klare Abschnitte (z.B. Geopolitik, Nationale Politik, Wirtschaft).
-                        4. Der Ton soll professionell, sachlich und informativ sein.
+                        WICHTIGE ZUSATZAUFGABE:
+                        Füge GANZ AM ENDE deines Textes exakt diese Zeile ein, um die 3 bis 4 wichtigsten Schlagwörter/Themen zu nennen, getrennt durch Kommas:
+                        SCHLAGWÖRTER: Wort1, Wort2, Wort3
                         """
                         
                         verfuegbare_modelle = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                        model = genai.GenerativeModel(verfuegbare_modelle[0]) 
+                        antwort = model.generate_content(prompt)
                         
-                        if verfuegbare_modelle:
-                            model = genai.GenerativeModel(verfuegbare_modelle[0]) 
-                            antwort = model.generate_content(prompt)
-                            st.success("Dein heutiges Briefing:")
-                            st.markdown(antwort.text)
+                        # Text und Schlagwörter trennen und im Gedächtnis speichern
+                        if "SCHLAGWÖRTER:" in antwort.text:
+                            teile = antwort.text.split("SCHLAGWÖRTER:")
+                            st.session_state.briefing_text = teile[0].strip()
+                            st.session_state.themen_liste = [t.strip() for t in teile[1].split(",") if t.strip()]
                         else:
-                            st.error("Dein API-Key hat aktuell keinen Zugriff auf Text-Modelle.")
+                            st.session_state.briefing_text = antwort.text
+                            st.session_state.themen_liste = []
+                            
+                        st.session_state.klick_thema = None # Reset beim Neugenerieren
                             
                     except Exception as e:
                         st.error(f"Fehler bei der Textgenerierung: {e}")
 
-        # --- 8. Artikel anzeigen ---
+        # --- Anzeige des Briefings, Audio und Buttons (aus dem Gedächtnis) ---
+        if st.session_state.briefing_text:
+            st.success("Dein heutiges Briefing:")
+            st.markdown(st.session_state.briefing_text)
+            
+            # Audio-Player erstellen (wird nur neu geladen, wenn sich der Text ändert)
+            with st.spinner("Generiere Audio..."):
+                tts = gTTS(text=st.session_state.briefing_text, lang='de')
+                audio_bytes = io.BytesIO()
+                tts.write_to_fp(audio_bytes)
+                st.audio(audio_bytes, format="audio/mp3")
+
+            # Themen-Buttons anzeigen
+            if st.session_state.themen_liste:
+                st.write("**Top-Themen vertiefen (Klicken zum Filtern):**")
+                # Erstellt für jedes Thema einen Button nebeneinander
+                spalten = st.columns(len(st.session_state.themen_liste))
+                for i, thema in enumerate(st.session_state.themen_liste):
+                    if spalten[i].button(thema):
+                        st.session_state.klick_thema = thema
+
+        # --- 8. Artikel anzeigen (mit Klick-Thema Filter) ---
         st.divider()
-        st.subheader(f"📰 Top-Meldungen ({len(gefilterte_artikel)} gefunden - Bunt gemischt)")
         
-        for art in gefilterte_artikel:
+        # Prüfen, ob ein Button geklickt wurde, und Liste entsprechend filtern
+        anzeige_artikel = gefilterte_artikel
+        if st.session_state.klick_thema:
+            st.subheader(f"📰 Spezifische Artikel zum Thema: {st.session_state.klick_thema}")
+            # Filtert die Liste nach dem angeklickten Wort
+            anzeige_artikel = [art for art in gefilterte_artikel if st.session_state.klick_thema.lower() in (art.get('title') or '').lower()]
+        else:
+            st.subheader(f"📰 Top-Meldungen ({len(anzeige_artikel)} gefunden - Bunt gemischt)")
+        
+        # Artikel darstellen
+        for art in anzeige_artikel:
             titel = art.get('title') or 'Kein Titel verfügbar'
             url = art.get('url') or '#'
             quelle = art.get('source', {}).get('name') or 'Unbekannte Quelle'
@@ -160,5 +203,6 @@ if data.get('status') == 'ok':
             st.write(f"**{titel}**")
             st.caption(f"Quelle: {quelle} | [Zum Artikel]({url})")
             st.write("---")
+            
 else:
     st.error(f"Fehler beim Abrufen der Nachrichten. API-Status: {data.get('status')}")
