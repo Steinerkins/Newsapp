@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import google.generativeai as genai
-from datetime import datetime
+from datetime import datetime, timedelta
 from gtts import gTTS
 import io
 
@@ -39,17 +39,21 @@ st.write(f"**Update vom {heute}** | Fokus: Geopolitik, Wirtschaft & Politik")
 such_ereignis = st.text_input("🔍 Suchst du nach einem bestimmten Ereignis? (Leer lassen für das allgemeine Briefing)", "")
 
 # --- 3. Suchparameter definieren ---
+# Wir berechnen das Datum von gestern (Format: YYYY-MM-DD)
+gestern = (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d')
+
 if such_ereignis:
-    query = f"({such_ereignis}) -Sport -Fußball -Promi -Stars -TV -Werbung"
+    query = such_ereignis # Wir lassen dem Nutzer völlig freie Hand
 else:
-    # Standard-Suche
-    query = "(Politik OR Wirtschaft OR Geopolitik OR Weltgeschehen OR Bundesregierung) -Sport -Fußball -Promi -Stars -TV -Werbung -Klatsch"
+    # Breite, allgemeine Begriffe. Wir vertrauen auf die seriösen Quellen.
+    query = "Politik OR Wirtschaft OR Gesellschaft OR Ausland OR Inland OR Regierung"
 
 params = {
     'q': query,
     'apiKey': NEWS_API_KEY,
     'language': 'de',
-    'sortBy': 'relevancy',
+    'sortBy': 'publishedAt', # WICHTIG: Die neuesten Artikel zuerst (nicht die "relevantesten")
+    'from': gestern,         # NEU: Keine Artikel, die älter als gestern sind!
     'pageSize': 80,
     'domains': erlaubte_quellen_str
 }
