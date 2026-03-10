@@ -143,9 +143,9 @@ if data.get('status') == 'ok':
                         
                         quellen_text = "\n".join(artikel_daten)
 
-                        with st.expander("🔍 Debug: Was liest die KI genau? (Hier klicken)"):
+            with st.expander("🔍 Debug: Was liest die KI genau? (Hier klicken)"):
             debug_texte = [f"Titel: {a.get('title')} | Teaser: {a.get('description')}" for a in gefilterte_artikel if a.get('title') and a.get('description')]
-            st.info("\n\n".join(debug_texte[:10])) # Wir zeigen die Top 10 an
+            st.info("\n\n".join(debug_texte[:10]))
         # ----------------------------------------------
 
         if st.button("Ausführliches Briefing generieren"):
