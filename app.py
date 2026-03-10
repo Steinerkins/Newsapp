@@ -143,11 +143,19 @@ if data.get('status') == 'ok':
                         
                         quellen_text = "\n".join(artikel_daten)
 
-                        # --- DEBUG-FENSTER: Unter die Haube schauen ---
                         with st.expander("🔍 Debug: Was liest die KI genau? (Hier klicken)"):
-                            st.write("Dies ist der exakte Text, den die KI als Quelle bekommt:")
-                            st.info(quellen_text)
-                        # ----------------------------------------------
+            debug_texte = [f"Titel: {a.get('title')} | Teaser: {a.get('description')}" for a in gefilterte_artikel if a.get('title') and a.get('description')]
+            st.info("\n\n".join(debug_texte[:10])) # Wir zeigen die Top 10 an
+        # ----------------------------------------------
+
+        if st.button("Ausführliches Briefing generieren"):
+            if not gefilterte_artikel:
+                st.warning("Keine Artikel zum Zusammenfassen gefunden.")
+            else:
+                with st.spinner("Redaktion arbeitet... Bitte hab einen Moment Geduld."):
+                    try:
+                        # Daten für die KI aufbereiten
+                        artikel_daten = []
 
                         prompt = f"""
                         Du bist ein professioneller Nachrichtensprecher. Erstelle ein tagesaktuelles Morgen-Briefing, das AUSSCHLIESSLICH auf den folgenden redaktionellen Meldungen von heute basiert:
