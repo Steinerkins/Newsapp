@@ -136,7 +136,17 @@ if data.get('status') == 'ok':
                         titel_liste = [art.get('title') for art in gefilterte_artikel]
                         # Neuer Prompt: Wir fordern die KI auf, die Themen am Ende aufzulisten
                         prompt = f"""
-                        Erstelle ein flüssig lesbares Morgen-Briefing (ca. 400 Wörter) zu diesen tagesaktuellen Titeln: {titel_liste}.
+                        Du bist ein professioneller Nachrichtensprecher. Erstelle ein tagesaktuelles Morgen-Briefing, das AUSSCHLIESSLICH auf den folgenden Schlagzeilen von heute basiert: {titel_liste}.
+                        
+                        DEINE AUFGABE UND REGELN:
+                        1. Stil & Länge: Schreibe einen sachlichen, professionellen Fließtext von ca. 300 Wörtern, der sich wie die Moderation einer Nachrichtensendung liest.
+                        2. Struktur: Gliedere den Text in sinnvolle Themenblöcke.
+                        3. Strikte Faktenbindung: Verwende KEIN externes Wissen! Erfinde absolut nichts dazu. Wenn die Schlagzeilen ein Thema nicht hergeben, erwähne es nicht.
+                        4. Konkrete Themen-Buttons: Anstatt allgemeiner Kategorien (wie "Wirtschaft" oder "Politik"), musst du spezifische Ereignisse benennen (z.B. "Landtagswahl in Sachsen", "Streik bei der Bahn", "Zinssenkung der EZB").
+                        
+                        WICHTIG: Füge GANZ AM ENDE deines Textes exakt diese Zeile ein, um 3 bis 4 dieser spezifischen Ereignisse kommagetrennt aufzulisten:
+                        SCHLAGWÖRTER: Konkretes Ereignis 1, Konkretes Ereignis 2, Konkretes Ereignis 3
+                        """
                         
                         WICHTIGE ZUSATZAUFGABE:
                         Füge GANZ AM ENDE deines Textes exakt diese Zeile ein, um die 3 bis 4 wichtigsten Schlagwörter/Themen zu nennen, getrennt durch Kommas:
