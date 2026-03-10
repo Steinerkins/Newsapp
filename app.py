@@ -40,8 +40,8 @@ params = {
     'apiKey': NEWS_API_KEY,
     'language': 'de',
     'sortBy': 'relevancy',
-    'pageSize': 80, # 80 Artikel laden für einen großen "Misch-Topf"
-    'domains': erlaubte_quellen_str  
+    'pageSize': 80,
+    'domains': erlaubt_quellen_str
 }
 
 # --- 4. Daten abrufen (mit Cache) ---
