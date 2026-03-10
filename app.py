@@ -51,7 +51,7 @@ params = {
     'language': 'de',
     'sortBy': 'relevancy',
     'pageSize': 80,
-    'domains': erlaubt_quellen_str
+    'domains': erlaubte_quellen_str
 }
 
 # --- 4. Daten abrufen (mit Cache) ---
