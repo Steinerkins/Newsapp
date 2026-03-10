@@ -127,6 +127,13 @@ if data.get('status') == 'ok':
         st.divider()
         st.subheader("✨ Dein ausführliches KI-Briefing")
         
+        # --- DEBUG-FENSTER (Direkt unter der Überschrift, VOR dem Button) ---
+        with st.expander("🔍 Debug: Was liest die KI genau? (Hier klicken)"):
+            debug_texte = [f"Titel: {a.get('title')} | Teaser: {a.get('description')}" for a in gefilterte_artikel if a.get('title') and a.get('description')]
+            st.info("\n\n".join(debug_texte[:10]))
+        # ----------------------------------------------
+
+        # Hier gibt es nur EINEN EINZIGEN Button-Aufruf
         if st.button("Ausführliches Briefing generieren"):
             if not gefilterte_artikel:
                 st.warning("Keine Artikel zum Zusammenfassen gefunden.")
@@ -142,20 +149,6 @@ if data.get('status') == 'ok':
                                 artikel_daten.append(f"SCHLAGZEILE: {titel} | ZUSAMMENFASSUNG: {teaser}")
                         
                         quellen_text = "\n".join(artikel_daten)
-
-            with st.expander("🔍 Debug: Was liest die KI genau? (Hier klicken)"):
-            debug_texte = [f"Titel: {a.get('title')} | Teaser: {a.get('description')}" for a in gefilterte_artikel if a.get('title') and a.get('description')]
-            st.info("\n\n".join(debug_texte[:10]))
-            # ----------------------------------------------
-
-            if st.button("Ausführliches Briefing generieren"):
-                if not gefilterte_artikel:
-                st.warning("Keine Artikel zum Zusammenfassen gefunden.")
-            else:
-                with st.spinner("Redaktion arbeitet... Bitte hab einen Moment Geduld."):
-                    try:
-                        # Daten für die KI aufbereiten
-                        artikel_daten = []
 
                         prompt = f"""
                         Du bist ein professioneller Nachrichtensprecher. Erstelle ein tagesaktuelles Morgen-Briefing, das AUSSCHLIESSLICH auf den folgenden redaktionellen Meldungen von heute basiert:
