@@ -99,23 +99,27 @@ if data.get('status') == 'ok':
         with col2:
             gewaehltes_thema = st.selectbox("Nach Thema filtern:", ["Alle", "Politik", "Wirtschaft", "Krise", "Regierung"])
 
-        # --- Vorfilterung anwenden (inklusive Regionen) ---
+    # --- Vorfilterung anwenden (inklusive Regionen) ---
         vorauswahl = []
         for art in alle_artikel:
             titel = art.get('title') or ""
             quelle = art.get('source', {}).get('name') or ""
             url = (art.get('url') or "").lower()
             
-            # Region des Artikels bestimmen
-            region = "INT"
-            if ".de" in url or "dw.com" or "faz.net" in url:
+            # 1. ZENTRALE REGION-ZUWEISUNG (Einmal für alles!)
+            if ".de" in url or "dw.com" in url or "faz.net" in url:
                 region = "DE"
             elif "bbc" in url or "theguardian" in url:
                 region = "GB"
             elif "reuters" in url or "apnews" in url or "npr" in url:
                 region = "US"
+            else:
+                region = "INT"
                 
-            # Prüfen, ob die gefundene Region angehakt ist
+            # Wir speichern die Region direkt in den Artikel-Daten!
+            art['region'] = region
+
+            # 2. FILTER-LOGIK
             region_erlaubt = False
             if region == "DE" and zeige_de: region_erlaubt = True
             elif region == "US" and zeige_us: region_erlaubt = True
@@ -125,7 +129,7 @@ if data.get('status') == 'ok':
             quelle_passt = (gewaehlte_quelle == "Alle") or (quelle == gewaehlte_quelle)
             thema_passt = (gewaehltes_thema == "Alle") or (gewaehltes_thema.lower() in titel.lower())
             
-            # Nur hinzufügen, wenn Region, Quelle UND Thema passen
+            # Nur hinzufügen, wenn alles passt
             if region_erlaubt and quelle_passt and thema_passt:
                 vorauswahl.append(art)
 
@@ -265,23 +269,15 @@ if data.get('status') == 'ok':
         else:
             st.subheader(f"📰 Top-Meldungen ({len(anzeige_artikel)} gefunden - Bunt gemischt)")
         
-       # Artikel darstellen
+     # --- 8. Artikel darstellen ---
         for art in anzeige_artikel:
             titel = art.get('title') or 'Kein Titel verfügbar'
             url = art.get('url') or '#'
             quelle = art.get('source', {}).get('name') or 'Unbekannte Quelle'
             
-           # Windows-kompatible Text-Tags
-            tag = "[INT]"
-            url_lower = url.lower()
-            if ".de" in url_lower or "dw.com" in url_lower or "faz.net" in url_lower: # <--- HIER ERGÄNZT
-                tag = "[DE]"
-            elif "bbc" in url_lower or "theguardian" in url_lower:
-                tag = "[GB]"
-            elif "reuters" in url_lower or "apnews" in url_lower or "npr" in url_lower:
-                tag = "[US]"
+            # Wir lesen einfach die zentral vergebene Region ab
+            tag = f"[{art.get('region', 'INT')}]"
             
-            # Tag vor den Titel setzen
             st.write(f"**{tag} {titel}**")
             st.caption(f"Quelle: {quelle} | [Zum Artikel]({url})")
             st.write("---")
