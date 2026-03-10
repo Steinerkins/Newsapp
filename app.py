@@ -146,10 +146,10 @@ if data.get('status') == 'ok':
             with st.expander("🔍 Debug: Was liest die KI genau? (Hier klicken)"):
             debug_texte = [f"Titel: {a.get('title')} | Teaser: {a.get('description')}" for a in gefilterte_artikel if a.get('title') and a.get('description')]
             st.info("\n\n".join(debug_texte[:10]))
-        # ----------------------------------------------
+            # ----------------------------------------------
 
-        if st.button("Ausführliches Briefing generieren"):
-            if not gefilterte_artikel:
+            if st.button("Ausführliches Briefing generieren"):
+                if not gefilterte_artikel:
                 st.warning("Keine Artikel zum Zusammenfassen gefunden.")
             else:
                 with st.spinner("Redaktion arbeitet... Bitte hab einen Moment Geduld."):
