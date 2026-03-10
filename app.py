@@ -271,10 +271,10 @@ if data.get('status') == 'ok':
             url = art.get('url') or '#'
             quelle = art.get('source', {}).get('name') or 'Unbekannte Quelle'
             
-            # Windows-kompatible Text-Tags
+           # Windows-kompatible Text-Tags
             tag = "[INT]"
             url_lower = url.lower()
-            if ".de" in url_lower or "dw.com" in url_lower:
+            if ".de" in url_lower or "dw.com" in url_lower or "faz.net" in url_lower: # <--- HIER ERGÄNZT
                 tag = "[DE]"
             elif "bbc" in url_lower or "theguardian" in url_lower:
                 tag = "[GB]"
