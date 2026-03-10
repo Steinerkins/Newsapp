@@ -42,6 +42,8 @@ such_ereignis = st.text_input("🔍 Suchst du nach einem bestimmten Ereignis? (L
 # --- 3. Suchparameter definieren ---
 gestern = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
 
+sport_filter = "-sport -sports -football -soccer -tennis -nfl -nba -bundesliga -basketball -olympics"
+
 if such_ereignis:
     query = such_ereignis
 else:
@@ -53,7 +55,7 @@ params = {
     'apiKey': NEWS_API_KEY,
     'sortBy': 'publishedAt', 
     'from': gestern,         
-    'pageSize': 100,         # Leicht erhöht, um die vielen neuen Quellen aufzufangen
+    'pageSize': 100,         
     'domains': erlaubte_quellen_str
 }
 
@@ -73,11 +75,19 @@ if data.get('status') == 'ok':
     if not alle_artikel:
         st.info("Heute gibt es leider keine passenden Artikel zu dieser Suche.")
     else:
-        # --- 5. Filter UI ---
+       # --- 5. Filter UI ---
         st.divider()
-        col1, col2 = st.columns(2)
         
-        # Sicheres Auslesen aller Quellen für das Dropdown-Menü
+        # NEU: Checkboxen für die Regionen
+        st.write("**Nach Regionen filtern:**")
+        col_de, col_us, col_gb, col_int = st.columns(4)
+        zeige_de = col_de.checkbox("[DE] Deutschland", value=True)
+        zeige_us = col_us.checkbox("[US] USA", value=True)
+        zeige_gb = col_gb.checkbox("[GB] Großbritannien", value=True)
+        zeige_int = col_int.checkbox("[INT] International", value=True)
+        
+        # Die bisherigen Filter
+        col1, col2 = st.columns(2)
         verfuegbare_quellen = []
         for art in alle_artikel:
             quelle = art.get('source', {}).get('name')
@@ -89,17 +99,34 @@ if data.get('status') == 'ok':
         with col2:
             gewaehltes_thema = st.selectbox("Nach Thema filtern:", ["Alle", "Politik", "Wirtschaft", "Krise", "Regierung"])
 
-        # --- Vorfilterung anwenden ---
+        # --- Vorfilterung anwenden (inklusive Regionen) ---
         vorauswahl = []
         for art in alle_artikel:
-            # Fallback auf leere Strings, falls die API 'None' liefert
             titel = art.get('title') or ""
             quelle = art.get('source', {}).get('name') or ""
+            url = (art.get('url') or "").lower()
+            
+            # Region des Artikels bestimmen
+            region = "INT"
+            if ".de" in url or "dw.com" in url:
+                region = "DE"
+            elif "bbc" in url or "theguardian" in url:
+                region = "GB"
+            elif "reuters" in url or "apnews" in url or "npr" in url:
+                region = "US"
+                
+            # Prüfen, ob die gefundene Region angehakt ist
+            region_erlaubt = False
+            if region == "DE" and zeige_de: region_erlaubt = True
+            elif region == "US" and zeige_us: region_erlaubt = True
+            elif region == "GB" and zeige_gb: region_erlaubt = True
+            elif region == "INT" and zeige_int: region_erlaubt = True
             
             quelle_passt = (gewaehlte_quelle == "Alle") or (quelle == gewaehlte_quelle)
             thema_passt = (gewaehltes_thema == "Alle") or (gewaehltes_thema.lower() in titel.lower())
             
-            if quelle_passt and thema_passt:
+            # Nur hinzufügen, wenn Region, Quelle UND Thema passen
+            if region_erlaubt and quelle_passt and thema_passt:
                 vorauswahl.append(art)
 
         # --- 6. Misch-Logik (Diversität erzwingen) ---
