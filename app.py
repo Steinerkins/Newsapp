@@ -123,7 +123,7 @@ if data.get('status') == 'ok':
                 if len(gefilterte_artikel) >= max_anzeige:
                     break
 
-# --- 7. KI-Briefing mit Audio & Themen-Extraktion ---
+# --- 7. KI-Briefing mit Debug-Ansicht & Pro-Modell ---
         st.divider()
         st.subheader("✨ Dein ausführliches KI-Briefing")
         
@@ -133,16 +133,21 @@ if data.get('status') == 'ok':
             else:
                 with st.spinner("Redaktion arbeitet... Bitte hab einen Moment Geduld."):
                     try:
+                        # Daten für die KI aufbereiten (Titel + Teaser)
                         artikel_daten = []
                         for art in gefilterte_artikel:
                             titel = art.get('title') or ""
                             teaser = art.get('description') or ""
-                            # Wir nehmen nur Artikel, die auch wirklich Inhalt haben
                             if titel and teaser:
-                                artikel_daten.append(f"SCHLAGZEILE: {titel} | REDAKTIONELLE ZUSAMMENFASSUNG: {teaser}")
+                                artikel_daten.append(f"SCHLAGZEILE: {titel} | ZUSAMMENFASSUNG: {teaser}")
                         
-                        # Wir wandeln die Liste in einen Textblock um
                         quellen_text = "\n".join(artikel_daten)
+
+                        # --- DEBUG-FENSTER: Unter die Haube schauen ---
+                        with st.expander("🔍 Debug: Was liest die KI genau? (Hier klicken)"):
+                            st.write("Dies ist der exakte Text, den die KI als Quelle bekommt:")
+                            st.info(quellen_text)
+                        # ----------------------------------------------
 
                         prompt = f"""
                         Du bist ein professioneller Nachrichtensprecher. Erstelle ein tagesaktuelles Morgen-Briefing, das AUSSCHLIESSLICH auf den folgenden redaktionellen Meldungen von heute basiert:
@@ -151,20 +156,34 @@ if data.get('status') == 'ok':
                         {quellen_text}
                         
                         DEINE AUFGABE UND REGELN:
-                        1. Stil & Länge: Schreibe einen sachlichen, professionellen Fließtext von ca. 300 Wörtern. Nutze die Fakten aus den redaktionellen Zusammenfassungen, um Tiefe zu erzeugen.
+                        1. Stil & Länge: Schreibe einen sachlichen, professionellen Fließtext von ca. 300 Wörtern.
                         2. Struktur: Gliedere den Text in sinnvolle Themenblöcke.
-                        3. Strikte Faktenbindung: Verwende KEIN externes Wissen! Bleib exakt bei den Fakten aus dem Quellmaterial.
-                        4. Konkrete Themen-Buttons: Benenne spezifische, im Text erwähnte Ereignisse (z.B. "Landtagswahl in Sachsen", "Zinssenkung").
+                        3. Strikte Faktenbindung: Verwende KEIN externes Wissen! Bleib exakt bei den Fakten aus dem Quellmaterial. Erfinde NICHTS dazu.
+                        4. Konkrete Themen-Buttons: Benenne spezifische, im Text erwähnte Ereignisse.
                         
                         WICHTIG: Füge GANZ AM ENDE deines Textes exakt diese Zeile ein:
-                        Wichtigste Themen des Tages: Ereignis 1, Ereignis 2, Ereignis 3
+                        SCHLAGWÖRTER: Ereignis 1, Ereignis 2, Ereignis 3
                         """
                         
+                        # --- MODELL-AUSWAHL: Wir erzwingen ein intelligenteres Modell ---
                         verfuegbare_modelle = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                        model = genai.GenerativeModel(verfuegbare_modelle[0]) 
+                        
+                        # Wir suchen gezielt nach den besten Modellen (Pro oder Flash)
+                        bestes_modell = None
+                        for wunsch_modell in ['models/gemini-1.5-pro', 'models/gemini-1.5-flash']:
+                            if wunsch_modell in verfuegbare_modelle:
+                                bestes_modell = wunsch_modell
+                                break # Stoppt, sobald das beste gefunden wurde
+                        
+                        # Fallback, falls Pro/Flash für diesen API-Key noch nicht freigeschaltet sind
+                        if not bestes_modell:
+                            bestes_modell = verfuegbare_modelle[0]
+                            st.toast(f"Hinweis: Nutze Standard-Modell ({bestes_modell})")
+                            
+                        model = genai.GenerativeModel(bestes_modell) 
                         antwort = model.generate_content(prompt)
                         
-                        # Text und Schlagwörter trennen und im Gedächtnis speichern
+                        # Text und Schlagwörter trennen...
                         if "SCHLAGWÖRTER:" in antwort.text:
                             teile = antwort.text.split("SCHLAGWÖRTER:")
                             st.session_state.briefing_text = teile[0].strip()
@@ -173,7 +192,10 @@ if data.get('status') == 'ok':
                             st.session_state.briefing_text = antwort.text
                             st.session_state.themen_liste = []
                             
-                        st.session_state.klick_thema = None # Reset beim Neugenerieren
+                        st.session_state.klick_thema = None 
+                            
+                    except Exception as e:
+                        st.error(f"Fehler bei der Textgenerierung: {e}")
                             
                     except Exception as e:
                         st.error(f"Fehler bei der Textgenerierung: {e}")
