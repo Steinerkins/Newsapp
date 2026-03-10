@@ -17,6 +17,8 @@ BASE_URL = 'https://newsapi.org/v2/everything'
 erlaubte_quellen_liste = [
     "tagesschau.de", "zdf.de", "n-tv.de", "t-online.de", 
     "rnd.de", "dw.com", "welt.de", "zeit.de", "faz.net", "sueddeutsche.de"
+    # Englische Agenturen & Leitmedien
+    "reuters.com", "apnews.com", "bbc.co.uk", "theguardian.com", "npr.org", "aljazeera.com"
 ]
 erlaubte_quellen_str = ",".join(erlaubte_quellen_liste)
 
@@ -39,22 +41,21 @@ st.write(f"**Update vom {heute}** | Fokus: Geopolitik, Wirtschaft & Politik")
 such_ereignis = st.text_input("🔍 Suchst du nach einem bestimmten Ereignis? (Leer lassen für das allgemeine Briefing)", "")
 
 # --- 3. Suchparameter definieren ---
-# Wir berechnen das Datum von gestern (Format: YYYY-MM-DD)
-gestern = (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d')
+gestern = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
 
 if such_ereignis:
-    query = such_ereignis # Wir lassen dem Nutzer völlig freie Hand
+    query = such_ereignis
 else:
-    # Breite, allgemeine Begriffe. Wir vertrauen auf die seriösen Quellen.
-    query = "Politik OR Wirtschaft OR Gesellschaft OR Ausland OR Inland OR Regierung"
+    # Deutsch & Englisch kombiniert
+    query = "Politik OR Wirtschaft OR Ausland OR Regierung OR politics OR economy OR international OR world OR crisis OR government"
 
 params = {
     'q': query,
     'apiKey': NEWS_API_KEY,
-    'language': 'de',
-    'sortBy': 'publishedAt', # WICHTIG: Die neuesten Artikel zuerst (nicht die "relevantesten")
-    'from': gestern,         # NEU: Keine Artikel, die älter als gestern sind!
-    'pageSize': 80,
+    'language': 'de,en',
+    'sortBy': 'publishedAt', 
+    'from': gestern,         
+    'pageSize': 100,         # Leicht erhöht, um die vielen neuen Quellen aufzufangen
     'domains': erlaubte_quellen_str
 }
 
@@ -165,6 +166,7 @@ if data.get('status') == 'ok':
                         2. Struktur: Gliedere den Text in sinnvolle Themenblöcke.
                         3. Strikte Faktenbindung: Verwende KEIN externes Wissen! Bleib exakt bei den Fakten aus dem Quellmaterial. Erfinde NICHTS dazu.
                         4. Konkrete Themen-Buttons: Benenne spezifische, im Text erwähnte Ereignisse.
+                        5. Quellmaterial ist teilweise auf Deutsch und teilweise auf Englisch. Der Ausgegebene Text soll aber komplett in sauberem Deutsch sein.
                         
                         WICHTIG: Füge GANZ AM ENDE deines Textes exakt diese Zeile ein:
                         SCHLAGWÖRTER: Ereignis 1, Ereignis 2, Ereignis 3
