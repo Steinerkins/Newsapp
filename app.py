@@ -191,14 +191,16 @@ if data.get('status') == 'ok':
                         {quellen_text}
                         
                         DEINE AUFGABE UND REGELN:
-                        1. Stil & Länge: Schreibe einen sachlichen, professionellen Fließtext von ca. 300 Wörtern.
-                        2. Struktur: Gliedere den Text in sinnvolle Themenblöcke.
-                        3. Strikte Faktenbindung: Verwende KEIN externes Wissen! Bleib exakt bei den Fakten aus dem Quellmaterial. Erfinde NICHTS dazu.
-                        4. Konkrete Themen-Buttons: Benenne spezifische, im Text erwähnte Ereignisse.
-                        5. Quellmaterial ist teilweise auf Deutsch und teilweise auf Englisch. Der Ausgegebene Text soll aber komplett in sauberem Deutsch sein.
+                        Du bist ein Nachrichtensprecher. Beginne deinen Bericht mit Guten Morgen (oder mit der entsprechenden Tageszeit), willkommen zum KI-Briefing.
+                        1. Stil & Länge: Schreibe einen sachlichen, professionellen Fließtext von ca. 300 Wörtern. Passe deine Ausdrucksweise der eines offiziellen Nachritenportals an.
+                        2. Struktur: Gliedere den Text in sinnvolle Themenblöcke. Orientiere dich auch hier an der Struktur seriöser Nachrichtenportalen (die Themen in Kurzfassung, nationale Ereignisse, internationale, Ereignisse etc.)
+                        3. Strikte Faktenbindung: Verwende KEIN externes Wissen! Bleib exakt bei den Fakten aus dem Quellmaterial.
+                        4. Konkrete Themen-Buttons: Extrahiere 8 bis 10 spezifische Ereignisse als prägnante Suchbegriffe (z.B. "Bahnstreik", "US-Wahlen", "Zinssenkung"). Keine ganzen Sätze!
+                        5. Quellmaterial ist teils englisch, das Briefing MUSS aber komplett auf Deutsch sein.
+                    
                         
-                        WICHTIG: Füge GANZ AM ENDE deines Textes exakt diese Zeile ein:
-                        SCHLAGWÖRTER: Ereignis 1, Ereignis 2, Ereignis 3
+                        WICHTIG: Füge GANZ AM ENDE deines Textes exakt diese Zeile ein (mit 8 bis 10 Begriffen):
+                        SCHLAGWÖRTER: Begriff 1, Begriff 2, Begriff 3, Begriff 4, Begriff 5, Begriff 6, Begriff 7, Begriff 8
                         """
                         
                         # --- MODELL-AUSWAHL: Wir erzwingen ein intelligenteres Modell ---
@@ -257,26 +259,60 @@ if data.get('status') == 'ok':
                     if spalten[i].button(thema):
                         st.session_state.klick_thema = thema
 
-        # --- 8. Artikel anzeigen (mit Klick-Thema Filter) ---
+        # --- 8. Artikel darstellen & Live-Suche ---
         st.divider()
         
-        # Prüfen, ob ein Button geklickt wurde, und Liste entsprechend filtern
-        anzeige_artikel = gefilterte_artikel
+        # Fall 1: Ein Thema-Button wurde geklickt
         if st.session_state.klick_thema:
-            st.subheader(f"📰 Spezifische Artikel zum Thema: {st.session_state.klick_thema}")
-            # Filtert die Liste nach dem angeklickten Wort
-            anzeige_artikel = [art for art in gefilterte_artikel if st.session_state.klick_thema.lower() in (art.get('title') or '').lower()]
+            st.subheader(f"📰 Alle aktuellen Artikel zum Thema: {st.session_state.klick_thema}")
+            
+            # --- NEU: Echte API-Anfrage für das angeklickte Thema ---
+            with st.spinner(f"Suche im News-Netzwerk nach '{st.session_state.klick_thema}'..."):
+                thema_params = {
+                    'q': st.session_state.klick_thema,
+                    'apiKey': NEWS_API_KEY,
+                    'sortBy': 'relevancy', # Hier macht Relevanz wieder Sinn!
+                    'from': gestern,
+                    'pageSize': 30, # 30 Treffer reichen für ein spezifisches Thema
+                    'domains': erlaubte_quellen_str
+                }
+                # Wir rufen die API einfach nochmal auf!
+                thema_daten = hole_nachrichten(thema_params)
+                
+                if thema_daten.get('status') == 'ok':
+                    anzeige_artikel = thema_daten.get('articles', [])
+                    if not anzeige_artikel:
+                        st.info("Leider keine weiteren Artikel zu exakt diesem Suchbegriff gefunden.")
+                else:
+                    anzeige_artikel = []
+                    st.error("Fehler bei der API-Anfrage.")
+                    
+            # Ein Button, um zum allgemeinen Feed zurückzukehren
+            if st.button("❌ Themen-Filter aufheben"):
+                st.session_state.klick_thema = None
+                st.rerun() 
+
+        # Fall 2: Standard-Ansicht (kein Button geklickt)
         else:
-            st.subheader(f"📰 Top-Meldungen ({len(anzeige_artikel)} gefunden - Bunt gemischt)")
-        
-     # --- 8. Artikel darstellen ---
+            st.subheader(f"📰 Top-Meldungen (Bunt gemischt)")
+            anzeige_artikel = gefilterte_artikel
+
+        # --- Anzeige-Schleife (für beide Fälle gültig) ---
         for art in anzeige_artikel:
             titel = art.get('title') or 'Kein Titel verfügbar'
             url = art.get('url') or '#'
             quelle = art.get('source', {}).get('name') or 'Unbekannte Quelle'
             
-            # Wir lesen einfach die zentral vergebene Region ab
-            tag = f"[{art.get('region', 'INT')}]"
+            # Wir berechnen das Tag hier nochmal schnell on-the-fly, 
+            # da die neu gesuchten Artikel nicht durch Block 5 gelaufen sind.
+            tag = "[INT]"
+            url_lower = url.lower()
+            if ".de" in url_lower or "dw.com" in url_lower or "faz.net" in url_lower:
+                tag = "[DE]"
+            elif "bbc" in url_lower or "theguardian" in url_lower:
+                tag = "[GB]"
+            elif "reuters" in url_lower or "apnews" in url_lower or "npr" in url_lower:
+                tag = "[US]"
             
             st.write(f"**{tag} {titel}**")
             st.caption(f"Quelle: {quelle} | [Zum Artikel]({url})")
