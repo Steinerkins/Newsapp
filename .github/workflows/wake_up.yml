@@ -1,0 +1,15 @@
+name: Wake up Streamlit App
+
+on:
+  schedule:
+    # Ausführung jeden Montag bis Freitag um 04:30 Uhr UTC (entspricht 05:30 Uhr deutscher Winterzeit, 06:30 Sommerzeit)
+    - cron: '30 4 * * 1-5'
+  workflow_dispatch: # Erlaubt manuelles Starten zum Testen
+
+jobs:
+  ping_app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit URL
+        # ERSETZE DIE URL HIER mit deiner echten Streamlit-URL!
+        run: curl -s -o /dev/null -w "%{http_code}" https://deine-app-name.streamlit.app/
