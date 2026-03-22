@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Ping Streamlit URL
         # ERSETZE DIE URL HIER mit deiner echten Streamlit-URL!
-        run: curl -s -o /dev/null -w "%{http_code}" https://deine-app-name.streamlit.app/
+        run: curl -s -o /dev/null -w "%{http_code}" https://newsapp-voc2qpkjrhxb973znruckq.streamlit.app/
