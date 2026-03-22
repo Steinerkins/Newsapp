@@ -5,54 +5,89 @@ from datetime import datetime, timedelta
 import asyncio
 import edge_tts
 import tempfile
+from bs4 import BeautifulSoup
 
-# --- 1. API Keys & Konfiguration ---
+# --- 1. Initialisierung & API-Setup ---
+# Lädt die API-Keys aus den Streamlit Secrets und konfiguriert das Gemini-Modell.
 NEWS_API_KEY = st.secrets["API_KEY"]  
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-
-# KI initialisieren
 genai.configure(api_key=GEMINI_API_KEY)
 
-# NewsAPI Einstellungen
+# --- 2. Basis-Konfiguration & Session State ---
+# Definiert Seitenlayout, Konstanten und die bereinigte Liste kostenloser Nachrichtenquellen.
+# Der Session State speichert Daten (wie generierte Texte), damit sie beim Neuladen der Seite nicht verschwinden.
+st.set_page_config(page_title="KI Morning Briefing", page_icon="☕", layout="wide")
 BASE_URL = 'https://newsapi.org/v2/everything'
 erlaubte_quellen_liste = [
-    "tagesschau.de", "zdf.de", "n-tv.de", "t-online.de", 
-    "rnd.de", "dw.com", "welt.de", "zeit.de", "faz.net", "sueddeutsche.de", 
-    "reuters.com", "apnews.com", "bbc.co.uk", "theguardian.com", "npr.org", "aljazeera.com"
+    "tagesschau.de", "zdf.de", "deutschlandfunk.de", "n-tv.de", "t-online.de", 
+    "rnd.de", "dw.com", "derstandard.at", "srf.ch",
+    "apnews.com", "bbc.com", "theguardian.com", "npr.org", "aljazeera.com", "euronews.com"
 ]
 erlaubte_quellen_str = ",".join(erlaubte_quellen_liste)
 
-# Seitenlayout
-st.set_page_config(page_title="KI Morning Briefing", page_icon="☕", layout="wide")
-
-# --- Gedächtnis der App (Session State) ---
 if 'briefing_text' not in st.session_state:
     st.session_state.briefing_text = ""
 if 'themen_liste' not in st.session_state:
     st.session_state.themen_liste = []
 if 'klick_thema' not in st.session_state:
     st.session_state.klick_thema = None
+if 'deep_dive_text' not in st.session_state:
+    st.session_state.deep_dive_text = ""
 
-# --- 2. UI Header & Suche ---
+# --- 3. Hilfsfunktionen: Scraping & KI-Helfer ---
+# Beinhaltet Funktionen, um Artikeltexte von Webseiten zu extrahieren (Scraping) 
+# und das beste verfügbare Gemini-Modell (Flash/Pro) automatisch auszuwählen.
+def hole_bestes_modell():
+    verfuegbare_modelle = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    for wunsch_modell in ['models/gemini-1.5-pro', 'models/gemini-1.5-flash']:
+        if wunsch_modell in verfuegbare_modelle:
+            return wunsch_modell
+    return verfuegbare_modelle[0]
+
+def scrape_artikel_text(url):
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    try:
+        res = requests.get(url, headers=headers, timeout=5)
+        res.raise_for_status()
+        soup = BeautifulSoup(res.text, 'html.parser')
+        absatze = soup.find_all('p')
+        text = " ".join([p.get_text() for p in absatze if len(p.get_text()) > 20])
+        return text[:8000] if text else None
+    except:
+        return None
+
+def optimiere_suchanfrage(user_input):
+    if not user_input:
+        return "Politik OR Wirtschaft OR Ausland OR Regierung OR politics OR economy OR international"
+    
+    prompt = f"""Übersetze die folgende Nutzereingabe in einen booleschen Suchstring für die NewsAPI.
+    Nutze OR, AND und Klammern. Fokussiere dich auf Kernbegriffe, lass Füllwörter weg.
+    Beispiel Eingabe: 'Was passiert im Nahen Osten?' -> Ausgabe: (Israel OR Gaza OR Libanon OR "Naher Osten" OR Nahost)
+    Eingabe: '{user_input}'
+    Gib AUSSCHLIESSLICH den Suchstring zurück, keinen anderen Text."""
+    
+    try:
+        model = genai.GenerativeModel(hole_bestes_modell())
+        antwort = model.generate_content(prompt)
+        return antwort.text.strip()
+    except:
+        return user_input # Fallback bei Fehler
+
+# --- 4. UI Header & Eingabe ---
+# Baut den Titel und das Suchfeld für die App auf.
 st.title("☕ Dein KI-gestütztes Morning Briefing")
 heute = datetime.now().strftime('%d.%m.%Y')
 st.write(f"**Update vom {heute}** | Fokus: Geopolitik, Wirtschaft & Politik")
 
 such_ereignis = st.text_input("🔍 Suchst du nach einem bestimmten Ereignis? (Leer lassen für das allgemeine Briefing)", "")
 
-# --- 3. Suchparameter definieren ---
+# --- 5. Datenbeschaffung (NewsAPI) ---
+# Bereitet die Suchparameter vor (inkl. KI-Optimierung der Suchbegriffe) und ruft die API ab.
 gestern = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-
-sport_filter = "-sport -sports -football -soccer -tennis -nfl -nba -bundesliga -basketball -olympics"
-
-if such_ereignis:
-    query = such_ereignis
-else:
-    # Deutsch & Englisch kombiniert
-    query = "Politik OR Wirtschaft OR Ausland OR Regierung OR politics OR economy OR international OR world OR crisis OR government"
+api_query = optimiere_suchanfrage(such_ereignis) if such_ereignis else optimiere_suchanfrage(None)
 
 params = {
-    'q': query,
+    'q': api_query,
     'apiKey': NEWS_API_KEY,
     'sortBy': 'publishedAt', 
     'from': gestern,         
@@ -60,7 +95,6 @@ params = {
     'domains': erlaubte_quellen_str
 }
 
-# --- 4. Daten abrufen (mit Cache) ---
 @st.cache_data(ttl=3600)
 def hole_nachrichten(p):
     response = requests.get(BASE_URL, params=p)
@@ -69,17 +103,15 @@ def hole_nachrichten(p):
 with st.spinner('Lade weltweite Nachrichten...'):
     data = hole_nachrichten(params)
 
-# --- Hauptlogik ---
+# --- 6. Hauptlogik & Filter-UI ---
+# Wertet die API-Antwort aus, erstellt die Filter (Regionen, Quellen) und wendet diese auf die Artikel an.
 if data.get('status') == 'ok':
     alle_artikel = data.get('articles', [])
     
     if not alle_artikel:
         st.info("Heute gibt es leider keine passenden Artikel zu dieser Suche.")
     else:
-       # --- 5. Filter UI ---
         st.divider()
-        
-        # NEU: Checkboxen für die Regionen
         st.write("**Nach Regionen filtern:**")
         col_de, col_us, col_gb, col_int = st.columns(4)
         zeige_de = col_de.checkbox("[DE] Deutschland", value=True)
@@ -87,250 +119,172 @@ if data.get('status') == 'ok':
         zeige_gb = col_gb.checkbox("[GB] Großbritannien", value=True)
         zeige_int = col_int.checkbox("[INT] International", value=True)
         
-        # Die bisherigen Filter
-        col1, col2 = st.columns(2)
-        verfuegbare_quellen = []
-        for art in alle_artikel:
-            quelle = art.get('source', {}).get('name')
-            if quelle and quelle not in verfuegbare_quellen:
-                verfuegbare_quellen.append(quelle)
-        
-        with col1:
-            gewaehlte_quelle = st.selectbox("Nach Quelle filtern:", ["Alle"] + sorted(verfuegbare_quellen))
-        with col2:
-            gewaehltes_thema = st.selectbox("Nach Thema filtern:", ["Alle", "Politik", "Wirtschaft", "Krise", "Regierung"])
-
-    # --- Vorfilterung anwenden (inklusive Regionen) ---
         vorauswahl = []
         for art in alle_artikel:
-            titel = art.get('title') or ""
-            quelle = art.get('source', {}).get('name') or ""
             url = (art.get('url') or "").lower()
-            
-            # 1. ZENTRALE REGION-ZUWEISUNG (Einmal für alles!)
-            if ".de" in url or "dw.com" in url or "faz.net" in url:
+            if ".de" in url or "dw.com" in url or "derstandard" in url or "srf" in url:
                 region = "DE"
             elif "bbc" in url or "theguardian" in url:
                 region = "GB"
-            elif "reuters" in url or "apnews" in url or "npr" in url:
+            elif "apnews" in url or "npr" in url:
                 region = "US"
             else:
                 region = "INT"
                 
-            # Wir speichern die Region direkt in den Artikel-Daten!
             art['region'] = region
 
-            # 2. FILTER-LOGIK
-            region_erlaubt = False
-            if region == "DE" and zeige_de: region_erlaubt = True
-            elif region == "US" and zeige_us: region_erlaubt = True
-            elif region == "GB" and zeige_gb: region_erlaubt = True
-            elif region == "INT" and zeige_int: region_erlaubt = True
-            
-            quelle_passt = (gewaehlte_quelle == "Alle") or (quelle == gewaehlte_quelle)
-            thema_passt = (gewaehltes_thema == "Alle") or (gewaehltes_thema.lower() in titel.lower())
-            
-            # Nur hinzufügen, wenn alles passt
-            if region_erlaubt and quelle_passt and thema_passt:
+            if (region == "DE" and zeige_de) or (region == "US" and zeige_us) or \
+               (region == "GB" and zeige_gb) or (region == "INT" and zeige_int):
                 vorauswahl.append(art)
 
-        # --- 6. Misch-Logik (Diversität erzwingen) ---
-        # Artikel nach Quelle gruppieren
+        # Diversität: Mischen der Quellen auf max. 20 Artikel
         artikel_nach_quelle = {}
         for art in vorauswahl:
             q_name = art.get('source', {}).get('name', 'Andere')
-            if q_name not in artikel_nach_quelle:
-                artikel_nach_quelle[q_name] = []
-            artikel_nach_quelle[q_name].append(art)
+            artikel_nach_quelle.setdefault(q_name, []).append(art)
 
         gefilterte_artikel = []
-        max_anzeige = 20
-        
-        # Abwechselnd einen Artikel pro Quelle ziehen
-        while len(gefilterte_artikel) < max_anzeige and artikel_nach_quelle:
-            quellen_namen = list(artikel_nach_quelle.keys())
-            for q in quellen_namen:
+        while len(gefilterte_artikel) < 20 and artikel_nach_quelle:
+            for q in list(artikel_nach_quelle.keys()):
                 if artikel_nach_quelle[q]:
                     gefilterte_artikel.append(artikel_nach_quelle[q].pop(0))
                 else:
                     del artikel_nach_quelle[q]
-                
-                if len(gefilterte_artikel) >= max_anzeige:
-                    break
+                if len(gefilterte_artikel) >= 20: break
 
-# --- 7. KI-Briefing mit Debug-Ansicht & Pro-Modell ---
+        # --- 7. Allgemeines KI-Briefing generieren ---
+        # Nimmt die gefilterten Artikel, extrahiert Teaser und lässt Gemini das Morning-Briefing schreiben.
         st.divider()
         st.subheader("✨ Dein ausführliches KI-Briefing")
         
-        # --- DEBUG-FENSTER (Direkt unter der Überschrift, VOR dem Button) ---
-        with st.expander("🔍 Debug: Was liest die KI genau? (Hier klicken)"):
-            debug_texte = [f"Titel: {a.get('title')} | Teaser: {a.get('description')}" for a in gefilterte_artikel if a.get('title') and a.get('description')]
-            st.info("\n\n".join(debug_texte[:10]))
-        # ----------------------------------------------
-
-        # Hier gibt es nur EINEN EINZIGEN Button-Aufruf
         if st.button("Ausführliches Briefing generieren"):
-            if not gefilterte_artikel:
-                st.warning("Keine Artikel zum Zusammenfassen gefunden.")
-            else:
-                with st.spinner("Redaktion arbeitet... Bitte hab einen Moment Geduld."):
-                    try:
-                        # Daten für die KI aufbereiten (Titel + Teaser)
-                        artikel_daten = []
-                        for art in gefilterte_artikel:
-                            titel = art.get('title') or ""
-                            teaser = art.get('description') or ""
-                            if titel and teaser:
-                                artikel_daten.append(f"SCHLAGZEILE: {titel} | ZUSAMMENFASSUNG: {teaser}")
-                        
-                        quellen_text = "\n".join(artikel_daten)
+            with st.spinner("Redaktion arbeitet... Bitte hab einen Moment Geduld."):
+                artikel_daten = [f"SCHLAGZEILE: {a.get('title')} | ZUSAMMENFASSUNG: {a.get('description')}" 
+                                 for a in gefilterte_artikel if a.get('title') and a.get('description')]
+                quellen_text = "\n".join(artikel_daten)
 
-                        prompt = f"""
-                        Du bist ein professioneller Nachrichtensprecher. Erstelle ein tagesaktuelles Briefing, das AUSSCHLIESSLICH auf den folgenden redaktionellen Meldungen von heute basiert:
-                        Beginne deinen Bericht mit einer Begrüßung (je nach Tageszeit), willkommen zum KI-Briefing.
-                        
-                        QUELLMATERIAL:
-                        {quellen_text}
-                        
-                        DEINE AUFGABE UND REGELN:
-                        1. Stil & Länge: Schreibe einen sachlichen, professionellen Fließtext von ca. 300 Wörtern. Passe deine Ausdrucksweise der eines offiziellen Nachritenportals an.
-                        2. Struktur: Gliedere den Text in sinnvolle Themenblöcke. Orientiere dich auch hier an der Struktur seriöser Nachrichtenportalen (die Themen in Kurzfassung, nationale Ereignisse, internationale, Ereignisse etc.)
-                        3. Strikte Faktenbindung: Verwende KEIN externes Wissen! Bleib exakt bei den Fakten aus dem Quellmaterial.
-                        4. Konkrete Themen-Buttons: Extrahiere 8 bis 10 spezifische Ereignisse als prägnante Suchbegriffe (z.B. "Bahnstreik", "US-Wahlen", "Zinssenkung"). Keine ganzen Sätze!
-                        5. Quellmaterial ist teils englisch, das Briefing MUSS aber komplett auf Deutsch sein.
+                prompt = f"""Du bist ein professioneller Nachrichtensprecher. Erstelle ein tagesaktuelles Briefing basierend auf diesen Meldungen:
+                {quellen_text}
+                
+                REGELN:
+                1. Schreibe einen sachlichen, gut strukturierten Text (ca. 300 Wörter) auf Deutsch, mit Einleitung Hauptteil und Schluss. Strukturiere die Themen sinnvoll nach Brisanz, Region oder anderen geeigneten Überthemen.
+                1.1 Beginne den Text mit einer geeigneten Begrüßung z. B. "guten Morgen, willkommen zum KI-Briefing", Achte dabei auf die Tageszeit. Beende den Artikel mit einer geeigneten Verabschiedung.
+                1.2 Der Artikel soll von einer automatischen Stimme vorgelesen werden. Verzichte auf Textbausteine wie +++ die die Vorlesequalität beinträchtigen könnten. 
+                2. Bleib exakt bei den Fakten aus dem Material. Keine Erfindungen.
+                3. Extrahiere am Ende 5 bis 8 sehr spezifische Kernthemen/Ereignisse als Suchbegriffe.
+                
+                WICHTIG: Füge GANZ AM ENDE diese Zeile ein:
+                SCHLAGWÖRTER: Begriff 1, Begriff 2, Begriff 3..."""
+                
+                try:
+                    model = genai.GenerativeModel(hole_bestes_modell())
+                    antwort = model.generate_content(prompt)
                     
+                    if "SCHLAGWÖRTER:" in antwort.text:
+                        teile = antwort.text.split("SCHLAGWÖRTER:")
+                        st.session_state.briefing_text = teile[0].strip()
+                        st.session_state.themen_liste = [t.strip() for t in teile[1].split(",") if t.strip()]
+                    else:
+                        st.session_state.briefing_text = antwort.text
+                        st.session_state.themen_liste = []
                         
-                        WICHTIG: Füge GANZ AM ENDE deines Textes exakt diese Zeile ein (mit 8 bis 10 Begriffen):
-                        SCHLAGWÖRTER: Begriff 1, Begriff 2, Begriff 3, Begriff 4, Begriff 5, Begriff 6, Begriff 7, Begriff 8
-                        """
-                        
-                        # --- MODELL-AUSWAHL: Wir erzwingen ein intelligenteres Modell ---
-                        verfuegbare_modelle = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                        
-                        # Wir suchen gezielt nach den besten Modellen (Pro oder Flash)
-                        bestes_modell = None
-                        for wunsch_modell in ['models/gemini-1.5-pro', 'models/gemini-1.5-flash']:
-                            if wunsch_modell in verfuegbare_modelle:
-                                bestes_modell = wunsch_modell
-                                break # Stoppt, sobald das beste gefunden wurde
-                        
-                        # Fallback, falls Pro/Flash für diesen API-Key noch nicht freigeschaltet sind
-                        if not bestes_modell:
-                            bestes_modell = verfuegbare_modelle[0]
-                            st.toast(f"Hinweis: Nutze Standard-Modell ({bestes_modell})")
-                            
-                        model = genai.GenerativeModel(bestes_modell) 
-                        antwort = model.generate_content(prompt)
-                        
-                        # Text und Schlagwörter trennen...
-                        if "SCHLAGWÖRTER:" in antwort.text:
-                            teile = antwort.text.split("SCHLAGWÖRTER:")
-                            st.session_state.briefing_text = teile[0].strip()
-                            st.session_state.themen_liste = [t.strip() for t in teile[1].split(",") if t.strip()]
-                        else:
-                            st.session_state.briefing_text = antwort.text
-                            st.session_state.themen_liste = []
-                            
-                        st.session_state.klick_thema = None 
-                            
-                    except Exception as e:
-                        st.error(f"Fehler bei der Textgenerierung: {e}")
-                            
-                    except Exception as e:
-                        st.error(f"Fehler bei der Textgenerierung: {e}")
+                    st.session_state.klick_thema = None 
+                    st.session_state.deep_dive_text = ""
+                except Exception as e:
+                    st.error(f"Fehler bei der Textgenerierung: {e}")
 
-        # --- Anzeige des Briefings, Audio und Buttons (aus dem Gedächtnis) ---
+        # --- 8. Anzeige Briefing & Audio ---
+        # Zeigt den generierten Text an und wandelt ihn asynchron in Sprache (Edge TTS) um.
         if st.session_state.briefing_text:
             st.success("Dein heutiges Briefing:")
             st.markdown(st.session_state.briefing_text)
             
-            # --- NEU: Premium Audio-Player (Edge TTS) ---
             with st.spinner("Tonstudio generiert Sprachausgabe..."):
-                # Wir lagern das in eine asynchrone Funktion aus
                 async def generiere_audio(text):
-                    # "de-DE-ConradNeural" ist eine sehr gute, professionelle Männerstimme.
-                    # Alternativen: "de-DE-AmalaNeural" (Frau) oder "de-DE-KillianNeural" (Mann)
                     sprecher = edge_tts.Communicate(text, "de-DE-ConradNeural", rate="+5%") 
-                    
-                    # Erstellt eine temporäre MP3-Datei
                     tmp_datei = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
                     await sprecher.save(tmp_datei.name)
                     return tmp_datei.name
                 
-                # Audio generieren und im Streamlit-Player laden
                 try:
                     audio_pfad = asyncio.run(generiere_audio(st.session_state.briefing_text))
                     st.audio(audio_pfad, format="audio/mp3")
                 except Exception as e:
-                    st.error(f"Fehler bei der Audio-Generierung: {e}")
+                    st.error("Audio-Generierung fehlgeschlagen.")
 
-            # Themen-Buttons anzeigen
+            # --- 9. Themen-Buttons (Deep-Dive Trigger) ---
+            # Zeigt die extrahierten Schlagwörter als Buttons an, um tiefere KI-Analysen auszulösen.
             if st.session_state.themen_liste:
-                st.write("**Top-Themen vertiefen (Klicken zum Filtern):**")
-                # Erstellt für jedes Thema einen Button nebeneinander
+                st.write("**Top-Themen vertiefen (Volltext-Analyse):**")
                 spalten = st.columns(len(st.session_state.themen_liste))
                 for i, thema in enumerate(st.session_state.themen_liste):
-                    if spalten[i].button(thema):
+                    if spalten[i].button(thema, key=f"btn_{i}"):
                         st.session_state.klick_thema = thema
+                        st.session_state.deep_dive_text = "" # Reset beim Klick
+                        st.rerun()
 
-        # --- 8. Artikel darstellen & Live-Suche ---
+        # --- 10. Deep-Dive: Volltext-Analyse ---
+        # Wenn ein Themen-Button geklickt wird: Sucht gezielt Artikel, scrapt den Volltext und generiert einen Hintergrundbericht.
         st.divider()
-        
-        # Fall 1: Ein Thema-Button wurde geklickt
         if st.session_state.klick_thema:
-            st.subheader(f"📰 Alle aktuellen Artikel zum Thema: {st.session_state.klick_thema}")
+            st.subheader(f"🔎 Deep-Dive: {st.session_state.klick_thema}")
             
-            # --- NEU: Echte API-Anfrage für das angeklickte Thema ---
-            with st.spinner(f"Suche im News-Netzwerk nach '{st.session_state.klick_thema}'..."):
-                thema_params = {
-                    'q': st.session_state.klick_thema,
-                    'apiKey': NEWS_API_KEY,
-                    'sortBy': 'relevancy', # Hier macht Relevanz wieder Sinn!
-                    'from': gestern,
-                    'pageSize': 30, # 30 Treffer reichen für ein spezifisches Thema
-                    'domains': erlaubte_quellen_str
-                }
-                # Wir rufen die API einfach nochmal auf!
-                thema_daten = hole_nachrichten(thema_params)
-                
-                if thema_daten.get('status') == 'ok':
-                    anzeige_artikel = thema_daten.get('articles', [])
-                    if not anzeige_artikel:
-                        st.info("Leider keine weiteren Artikel zu exakt diesem Suchbegriff gefunden.")
-                else:
-                    anzeige_artikel = []
-                    st.error("Fehler bei der API-Anfrage.")
-                    
-            # Ein Button, um zum allgemeinen Feed zurückzukehren
-            if st.button("❌ Themen-Filter aufheben"):
+            if st.button("❌ Zurück zur Übersicht"):
                 st.session_state.klick_thema = None
-                st.rerun() 
+                st.session_state.deep_dive_text = ""
+                st.rerun()
 
-        # Fall 2: Standard-Ansicht (kein Button geklickt)
+            # Nur generieren, wenn es noch nicht im State liegt
+            if not st.session_state.deep_dive_text:
+                with st.spinner(f"Recherchiere und lese Volltexte zu '{st.session_state.klick_thema}'..."):
+                    opt_query = optimiere_suchanfrage(st.session_state.klick_thema)
+                    thema_params = {
+                        'q': opt_query, 'apiKey': NEWS_API_KEY, 'sortBy': 'relevancy', 
+                        'from': gestern, 'pageSize': 10, 'domains': erlaubte_quellen_str
+                    }
+                    thema_daten = hole_nachrichten(thema_params)
+                    
+                    if thema_daten.get('status') == 'ok' and thema_daten.get('articles'):
+                        top_artikel = thema_daten['articles'][:5] # Max 5 Artikel für Deep-Dive lesen
+                        gesammelter_text = ""
+                        
+                        for art in top_artikel:
+                            url = art.get('url')
+                            if url:
+                                volltext = scrape_artikel_text(url)
+                                if volltext:
+                                    gesammelter_text += f"\n\nQUELLE: {art.get('source', {}).get('name')} | TITEL: {art.get('title')}\n{volltext}"
+                                else:
+                                    # Fallback auf Teaser, wenn Scraping fehlschlägt
+                                    gesammelter_text += f"\n\nQUELLE: {art.get('source', {}).get('name')} | TITEL: {art.get('title')}\n{art.get('content')}"
+
+                        dd_prompt = f"""Schreibe eine detaillierte, journalistische Hintergrundanalyse zu folgendem Thema, basierend auf den bereitgestellten Volltexten/Auszügen.
+                        Nutze Absätze und Aufzählungszeichen für die Lesbarkeit.
+                        
+                        MATERIAL:
+                        {gesammelter_text}
+                        """
+                        try:
+                            model = genai.GenerativeModel(hole_bestes_modell())
+                            dd_antwort = model.generate_content(dd_prompt)
+                            st.session_state.deep_dive_text = dd_antwort.text
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Fehler bei der Deep-Dive Generierung: {e}")
+                    else:
+                        st.info("Keine ausreichenden Informationen für einen Deep-Dive gefunden.")
+            
+            # Anzeige des Deep-Dive Textes
+            if st.session_state.deep_dive_text:
+                st.markdown(st.session_state.deep_dive_text)
+
+        # Fall 2: Keine spezifische Auswahl -> Standard-Feed anzeigen
         else:
-            st.subheader(f"📰 Top-Meldungen (Bunt gemischt)")
-            anzeige_artikel = gefilterte_artikel
+            st.subheader(f"📰 Rohdaten-Feed (Die aktuellsten Meldungen)")
+            for art in gefilterte_artikel:
+                st.write(f"**[{art.get('region', 'INT')}] {art.get('title', 'Kein Titel')}**")
+                st.caption(f"Quelle: {art.get('source', {}).get('name')} | [Zum Artikel]({art.get('url', '#')})")
+                st.write("---")
 
-        # --- Anzeige-Schleife (für beide Fälle gültig) ---
-        for art in anzeige_artikel:
-            titel = art.get('title') or 'Kein Titel verfügbar'
-            url = art.get('url') or '#'
-            quelle = art.get('source', {}).get('name') or 'Unbekannte Quelle'
-            
-            # Wir berechnen das Tag hier nochmal schnell on-the-fly, 
-            # da die neu gesuchten Artikel nicht durch Block 5 gelaufen sind.
-            tag = "[INT]"
-            url_lower = url.lower()
-            if ".de" in url_lower or "dw.com" in url_lower or "faz.net" in url_lower:
-                tag = "[DE]"
-            elif "bbc" in url_lower or "theguardian" in url_lower:
-                tag = "[GB]"
-            elif "reuters" in url_lower or "apnews" in url_lower or "npr" in url_lower:
-                tag = "[US]"
-            
-            st.write(f"**{tag} {titel}**")
-            st.caption(f"Quelle: {quelle} | [Zum Artikel]({url})")
-            st.write("---")
-            
 else:
     st.error(f"Fehler beim Abrufen der Nachrichten. API-Status: {data.get('status')}")
