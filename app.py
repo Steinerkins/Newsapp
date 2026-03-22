@@ -222,30 +222,39 @@ if data.get('status') == 'ok':
                         st.session_state.klick_thema = thema
                         st.session_state.deep_dive_text = "" # Reset beim Klick
                         st.rerun()
-
-        # --- 10. Deep-Dive: Volltext-Analyse ---
-        # Wenn ein Themen-Button geklickt wird: Sucht gezielt Artikel, scrapt den Volltext und generiert einen Hintergrundbericht.
+# --- 10. Deep-Dive: Volltext-Analyse ---
         st.divider()
         if st.session_state.klick_thema:
-            st.subheader(f"🔎 Deep-Dive: {st.session_state.klick_thema}")
+            st.subheader(f"🔎 Fokus-Thema: {st.session_state.klick_thema}")
             
             if st.button("❌ Zurück zur Übersicht"):
                 st.session_state.klick_thema = None
                 st.session_state.deep_dive_text = ""
                 st.rerun()
 
-            # Nur generieren, wenn es noch nicht im State liegt
-            if not st.session_state.deep_dive_text:
-                with st.spinner(f"Recherchiere und lese Volltexte zu '{st.session_state.klick_thema}'..."):
-                    opt_query = optimiere_suchanfrage(st.session_state.klick_thema)
-                    thema_params = {
-                        'q': opt_query, 'apiKey': NEWS_API_KEY, 'sortBy': 'relevancy', 
-                        'from': gestern, 'pageSize': 10, 'domains': erlaubte_quellen_str
-                    }
-                    thema_daten = hole_nachrichten(thema_params)
-                    
-                    if thema_daten.get('status') == 'ok' and thema_daten.get('articles'):
-                        top_artikel = thema_daten['articles'][:5] # Max 5 Artikel für Deep-Dive lesen
+            # Schritt 1: Artikel blitzschnell suchen und als Liste anzeigen
+            opt_query = optimiere_suchanfrage(st.session_state.klick_thema)
+            thema_params = {
+                'q': opt_query, 'apiKey': NEWS_API_KEY, 'sortBy': 'relevancy', 
+                'from': gestern, 'pageSize': 15, 'domains': erlaubte_quellen_str
+            }
+            thema_daten = hole_nachrichten(thema_params)
+            
+            if thema_daten.get('status') == 'ok' and thema_daten.get('articles'):
+                gefundene_artikel = thema_daten['articles']
+                
+                # Artikel-Vorschau anzeigen (Top 5)
+                st.write(f"**Aktuelle Artikel zu '{st.session_state.klick_thema}':**")
+                for art in gefundene_artikel[:5]:
+                    st.markdown(f"- **{art.get('source', {}).get('name')}**: [{art.get('title')}]({art.get('url')})")
+                
+                st.write("---")
+                
+                # Schritt 2: Der neue Button für das ausführliche Briefing
+                if st.button("📝 Deep-Dive Briefing inkl. Audio generieren (ca. 1 Min. Ladezeit)"):
+                    with st.spinner("Lese die Top 3 Artikel im Volltext und schreibe Hintergrundbericht..."):
+                        # Begrenzung auf 3 Artikel, um KI und Ladezeiten nicht zu überlasten
+                        top_artikel = gefundene_artikel[:3] 
                         gesammelter_text = ""
                         
                         for art in top_artikel:
@@ -255,11 +264,11 @@ if data.get('status') == 'ok':
                                 if volltext:
                                     gesammelter_text += f"\n\nQUELLE: {art.get('source', {}).get('name')} | TITEL: {art.get('title')}\n{volltext}"
                                 else:
-                                    # Fallback auf Teaser, wenn Scraping fehlschlägt
                                     gesammelter_text += f"\n\nQUELLE: {art.get('source', {}).get('name')} | TITEL: {art.get('title')}\n{art.get('content')}"
 
-                        dd_prompt = f"""Schreibe eine detaillierte, journalistische Hintergrundanalyse zu folgendem Thema, basierend auf den bereitgestellten Volltexten/Auszügen.
-                        Nutze Absätze und Aufzählungszeichen für die Lesbarkeit.
+                        dd_prompt = f"""Schreibe eine detaillierte, journalistische Hintergrundanalyse zu folgendem Thema.
+                        Umfang: ca. 500 bis 800 Wörter.
+                        Nutze Absätze und Aufzählungszeichen für eine gute Lesbarkeit.
                         
                         MATERIAL:
                         {gesammelter_text}
@@ -268,15 +277,29 @@ if data.get('status') == 'ok':
                             model = genai.GenerativeModel(hole_bestes_modell())
                             dd_antwort = model.generate_content(dd_prompt)
                             st.session_state.deep_dive_text = dd_antwort.text
-                            st.rerun()
                         except Exception as e:
                             st.error(f"Fehler bei der Deep-Dive Generierung: {e}")
-                    else:
-                        st.info("Keine ausreichenden Informationen für einen Deep-Dive gefunden.")
-            
-            # Anzeige des Deep-Dive Textes
-            if st.session_state.deep_dive_text:
-                st.markdown(st.session_state.deep_dive_text)
+
+                # Schritt 3: Anzeige des Textes UND des neuen Audio-Players
+                if st.session_state.deep_dive_text:
+                    st.success("Dein Deep-Dive Briefing:")
+                    st.markdown(st.session_state.deep_dive_text)
+                    
+                    with st.spinner("Tonstudio generiert Sprachausgabe für den Deep-Dive..."):
+                        async def generiere_dd_audio(text):
+                            sprecher = edge_tts.Communicate(text, "de-DE-ConradNeural", rate="+5%") 
+                            tmp_datei = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+                            await sprecher.save(tmp_datei.name)
+                            return tmp_datei.name
+                        
+                        try:
+                            dd_audio_pfad = asyncio.run(generiere_dd_audio(st.session_state.deep_dive_text))
+                            st.audio(dd_audio_pfad, format="audio/mp3")
+                        except Exception as e:
+                            st.error("Audio-Generierung fehlgeschlagen.")
+
+            else:
+                st.info("Leider keine passenden Artikel für diesen Deep-Dive gefunden.")
 
         # Fall 2: Keine spezifische Auswahl -> Standard-Feed anzeigen
         else:
